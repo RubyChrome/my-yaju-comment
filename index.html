@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="jp">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YAJU&U 自分のコメント分析</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="/favicon.ico">
+</head>
+
+<body>
+    <img src="YAJU&U_original.png" id="backgroundImage">
+    <div id="root">
+        <div id="fileInputScreen">
+            <div id="fileInputWrapper">
+                <input type="file" id="fileInput" multiple accept=".zip">
+                <button id="analyzeButton" class="fileInputButton"
+                    style="height: 80px; display: none;">ファイルを選択して分析</button>
+                <div style="display: flex; width: 100%;">
+                    <button id="useLastFile" class="fileInputButton">前回の分析データを使う</button>
+                    <span style="width: 16px;"></span>
+                    <button id="deleteLastFile" class="fileInputButton" style="width: auto;">前回の分析データを消す</button>
+                </div>
+            </div>
+            <div id="howToUse">
+                <p><a href="https://youtu.be/cdhph6QHrsU" target="_blank">説明動画</a></p>
+                <h2>使い方</h2>
+                <p><a href="https://takeout.google.com/settings/takeout/custom/youtube" target="_blank">Google データ エクスポート</a>に行く</p>
+                <p>「YouTubeのすべてのデータが含まれます」を押して、「コメント」のみが選択された状態にする</p>
+                <p>次のステップに行き、エクスポートを作成を押す（容量はそんなに大きくならないはず）</p>
+                <p>そのままサブ垢やブランドアカウントに切り替える（タブは開きっぱなしでいい）</p>
+                <p>また同じ操作をする（すべてのサブ垢で）</p>
+                <p>すべての垢で作業し終わったら、開きっぱなしにしてたタブ達に戻る</p>
+                <p>再読み込みして、最新のエクスポートをダウンロード</p>
+                <p>すべての垢で作業し終わったら、ここに戻ってくる</p>
+                <p>ダウンロードしたすべてのファイルをzipのままこ↑こ↓のサイトで読み込む</p>
+            </div>
+        </div>
+
+        <div id="analyzeScreen">
+            <div class="analyzePannel2">
+                <h3>合計コメント数</h3>
+                <p>詳細</p>
+                <p>連続コメント数</p>
+                <p>平均コメント数</p>
+                <button id="copyTextButton" class="pannelButton">クリップボードにコピー</button>
+            </div>
+            <!--<div class="analyzePannel" id="oldestComment">
+                <h3>自分の最古のコメント</h3>
+            </div>
+            <div class="analyzePannel" id="randomComment">
+                <h3>ランダム自分のコメントピックアップ</h3>
+                <button class="pannelButton" id="changeRandomCommentButton">いれかえ</button>
+                <div></div>
+            </div>-->
+            <div id="commentHoursTable">
+                <ol></ol>
+                <ol style="flex-grow: 1;"></ol>
+            </div>
+            <div class="analyzePannel" id="timeline">
+                <!--<h3>タイムライン</h3>-->
+                <div style="margin: 5px 0">
+                    <label for="timelineFilterSelector">フィルター</label>
+                    <select id="timelineFilterSelector">
+                        <option value="all" selected>全て</option>
+                        <option value="comment">通常コメのみ</option>
+                        <option value="reply">返信のみ</option>
+                    </select>
+                </div>
+                <div style="margin: 5px 0">
+                    <label for="timelineSortSelector">並べ替え</label>
+                    <select id="timelineSortSelector">
+                        <option value="older" selected>古い順</option>
+                        <option value="newer">新しい順</option>
+                        <option value="random">ランダム</option>
+                    </select>
+                </div>
+                <input type="date" id="timelineDate" value="2024-05-25" min="2024-05-25">
+                <div id="timelineCommentWrapper"></div>
+                <button class="pannelButton" id="timelineMoreButton">もっと見る</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js" type="module"></script>
+
+    <!--JSZip-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</body>
+
+</html>
