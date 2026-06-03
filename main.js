@@ -1,252 +1,471 @@
-let allComment = [];
-let oldestCommentIndex;
-let commentCombo = 0;
-let commentAverage;
 let fileReadCount = 0;
 let timelineNowIndex = 0;
 
 const fileInput = document.getElementById("fileInput");
 const isRuby = false;
 
+const commentId = [];//日付順に並べたコメントid　　返信コメidは無く親コメidだけが入ってたりなどタイムライン用のもの
+const commentData = {};//コメid：　コメントデータ
+const channelData = {};//チャンネルid：　ハンドル、アイコン
+
+const topCommentWithMyComment = {};//親コメントid：　子コメントid
+
+//下のやつは未使用
+const alreadyTopComment = [];//タイムライン配列作るとき用　　同じ親コメントが何個もタイムラインに出ないようにするため
+
+const analyzeResult = {
+    comments: 0,//返信含め全コメント
+    replies: 0,//返信だけ
+    combo: 0,
+    average: 0,
+}
+
+class Comment {
+    commentId;
+    channelId;
+    date;
+    topCommentId;
+    text;
+}
+
 let isYouTubeAllComment = false;
 
-
-function files(filedata, fileLength) {
-    const result = takeoutCSVconvert(filedata);
-
-    result.forEach((element) => {
-        if ((element) !== "") {
-            checkComment(element);
+//ファイル解凍して読み込んで、整理されたコメントのデータを作る
+const fileAnalyzer = {
+    //一番最初の
+    start() {
+        if (fileInput.files.length === 0) {
+            //ファイルが選択されていない
+            alert("ファイル選択して、どうぞ");
+            return;
         }
-    })
 
-    if (fileLength === 0) {
-        console.log("ファイル読み込み終わり！！！！！！！！！！！！！！");
-        fileReadCount++;
-
-        //選択していたすべてのファイルを読み込み終わっていたら分析開始
-        if (fileInput.files.length === fileReadCount) {
-            startAnalyze();
+        let isTakeoutFile;
+        if (isRuby) {
+            isTakeoutFile = window.confirm("Takeoutファイルですか？");
+        } else {
+            isTakeoutFile = true;
         }
-    }
-}
+        isYouTubeAllComment = window.confirm("YAJU&U以外のコメントも表示しますか？");
 
+        /*const analyzeButton = document.getElementById("analyzeButton");
+        analyzeButton.innerText = "分析中";
+        analyzeButton.style = "background-color: gray; touch-action: none;";*/
+        document.getElementById("fileInputWrapper").innerHTML = "読み込み中";
 
-function takeoutCSVconvert(data) {
-    let splitResult = [];
-    let theTrueResult = [];
-    let tmp = data.split("\n");
-
-    for (let i = 1; i < tmp.length; i++) {
-        //謎の空白行を読み込まない
-        if (tmp[i] !== "") {
-            splitResult[i] = tmp[i].split(",");
-
-            //YAJU&Uかどうか
-            if (splitResult[i].includes("niKAylKNIEI") || isYouTubeAllComment) {
-                const commentIndex = theTrueResult.length;
-                theTrueResult.push([]);
-
-                theTrueResult[commentIndex].push(splitResult[i][0]);//コメントid
-                theTrueResult[commentIndex].push(splitResult[i][1]);//チャンネルid
-
-                //投稿時間を読み取りやすい形式にする
-                const timeText = splitResult[i][2];
-                let date = new Date("2020-1-1T00:00:00");
-                date.setUTCFullYear(timeText.substr(0, 4));
-                date.setUTCMonth(timeText.substr(5, 2) - 1);
-                date.setUTCDate(timeText.substr(8, 2));
-                date.setUTCHours(timeText.substr(11, 2));
-                date.setUTCMinutes(timeText.substr(14, 2));
-                date.setUTCSeconds(timeText.substr(17, 2));
-
-                //reresult[commentIndex].push(timeText.substr(0, 4) + "" + timeText.substr(5, 2) + "" + timeText.substr(8, 2) + "" + timeText.substr(11, 2) + "" + timeText.substr(14, 2) + "" + timeText.substr(17, 2));
-                theTrueResult[commentIndex].push(date);
-
-                theTrueResult[commentIndex].push(splitResult[i][4]);//親コメントid
-                theTrueResult[commentIndex].push(splitResult[i].slice(splitResult[i].indexOf("niKAylKNIEI") + 1, splitResult[i].length - 1));//コメント内容
-                //console.log(reresult[commentIndex][4]);
-                //console.log(JSON.parse(reresult[commentIndex][4]));
-
-
-                //コメント内容の余計な部分を消す
-                /*reresult[commentIndex][4].forEach((element, index) => {
-                    if (reresult[commentIndex][4].length === 1) {
-                        //1行だから1文字最初と最後に入ってる余計な文字を考慮する
-                        reresult[commentIndex][4][index] = element.substring(13, element.length - 4);
-                    } else if (index === reresult[commentIndex][4].length - 1) {
-                        //最後の行だから1文字最後に入ってる余計な文字を考慮する
-                        reresult[commentIndex][4][index] = element.substring(12, element.length - 4);
-                    } else if (index === 0) {
-                        //最初の行だから1文字最初に入ってる余計な文字を考慮する
-                        reresult[commentIndex][4][index] = element.substring(13, element.length - 3);
-                    } else {
-                        //通常
-                        reresult[commentIndex][4][index] = element.substring(13, element.length - 4);
-                    }
-                })*/
-
-                //1行にしちゃうよ
-                //reresult[commentIndex][4] = reresult[commentIndex][4].join("");
-                theTrueResult[commentIndex][4] = convertUnkomojiretuToYarimasunemojiretu(theTrueResult[commentIndex][4]);
-
-                //reresult[commentIndex].push(result[i].slice(result[i].indexOf("niKAylKNIEI") + 1, result[i].length - 1));//コメント内容
-            }
+        //選択されたすべてのファイルを読む
+        for (let i = 0; i < fileInput.files.length; i++) {
+            const file = fileInput.files[i];
+            fileAnalyzer.fileCheck(file, isTakeoutFile);
         }
-    }
-    //console.log(reresult[0][4][0]);
-    return theTrueResult;
-}
+    },
 
-
-//コメントを分析
-function checkComment(array) {
-    //console.log(allComment.length);
-
-    //allComment.push(array);
-
-    //コメントを日付順にしたいので、配列を挿入する位置を計算する
-    let index = 0;
-    if (allComment.length !== 0) {
-        //↑allCommentになんも入ってない時はここをしない　エラーになるから
-        while (allComment[index] !== undefined && allComment[index][2] < array[2]) {
-            index++;
-            //console.log("index");
+    //それぞれのファイルをチェック（？）
+    fileCheck(file, isTakeoutFile) {
+        //console.log(file);
+        if (isTakeoutFile) {
+            fileAnalyzer.unzipFile(file);
+        } else {
+            readYajuhaiFile(file);
         }
-    }
-    //console.log(array[4]);
-    allComment.splice(index, 0, array);
+    },
 
+    //チェック後Takeoutファイルとして解凍
+    unzipFile(file) {
+        const reader = new FileReader();
 
-    /*//返信かどうかチェック
-    if (array[3] !== "") {
-        replyCommentCount++;
-    }*/
-}
+        reader.onload = function (e) {
+            const zip = new JSZip();
+            zip.loadAsync(e.target.result).then((contents) => {
+                //残りの解析するファイル数
+                let fileLength = (Object.keys(contents.files).length);
 
+                // ZIPファイルの内容を処理
+                Object.keys(contents.files).forEach((filename) => {
+                    //console.log(filename);
 
-function startAnalyze() {
-    if (isRuby) {
-        console.log(allComment);
-    }
-
-    /*let onlyContent = [];
-    allComment.forEach((element) => { if (element[3] === "") { onlyContent.push(element[4]) } });
-    console.log(onlyContent);*/
-    try {
-        localStorage.setItem("My_YAJU&U_comment", JSON.stringify(allComment));
-    } catch (error) {
-        alert(error);
-    }
-
-    document.getElementById("fileInputScreen").remove();
-    const el = document.querySelectorAll(".analyzePannel2")[0];
-    document.getElementById("analyzeScreen").style.display = "flex";
-
-    //返信のコメントを数える
-    const replyCommentCount = allComment.filter(element => element[3] !== "").length;
-
-    if (isYouTubeAllComment) {
-        el.children[0].innerText = ("YouTubeに合計 " + allComment.length + " コメントしました");
-    } else {
-        el.children[0].innerText = ("YAJU&Uに合計 " + allComment.length + " コメントしました");
-    }
-    el.children[1].innerText = ("（通常:" + (allComment.length - replyCommentCount) + " 返信:" + replyCommentCount + "）");
-
-    caculateCommentCombo();
-    el.children[2].innerText = ("最高 " + commentCombo + " 日連続コメント");
-
-    caculateOldestComment();
-    //getRandomComment();
-
-    caculateCommentAverage();
-    el.children[3].innerText = ("一日平均 " + commentAverage + " コメント");
-
-    if (isRuby) {
-        document.getElementById("backgroundImage").style.display = "block";
-    }
-    createCommentHoursTable()
-
-    setTimelineDate();
-    timeline();
-}
-
-
-document.getElementById("analyzeButton").onclick = startFileRead;
-
-fileInput.addEventListener("change", startFileRead, false);
-
-
-//ファイル読み込み
-function readfile(file, isTakeoutFile) {
-    //console.log(file);
-    if (isTakeoutFile) {
-        readTakeoutFile(file);
-    } else {
-        readYajuhaiFile(file);
-    }
-}
-
-function readTakeoutFile(file) {
-    const reader = new FileReader();
-
-    reader.onload = function (e) {
-        const zip = new JSZip();
-        zip.loadAsync(e.target.result).then((contents) => {
-            //残りの解析するファイル数
-            let fileLength = (Object.keys(contents.files).length);
-
-            // ZIPファイルの内容を処理
-            Object.keys(contents.files).forEach((filename) => {
-                //console.log(filename);
-
-                // 各ファイルのデータを取得
-                zip.file(filename).async('text').then((fileData) => {
-                    fileLength--;
-                    files(fileData, fileLength);
+                    // 各ファイルのデータを取得
+                    zip.file(filename).async('text').then((fileData) => {
+                        fileLength--;
+                        fileAnalyzer.readUnzippedFile(fileData, fileLength);
+                    });
                 });
             });
-        });
-    };
+        };
 
-    reader.readAsArrayBuffer(file);
-}
+        reader.readAsArrayBuffer(file);
+    },
 
+    //解凍後のファイルを読む
+    //全部読み終わったらコメント分析開始
+    readUnzippedFile(data, fileLength) {
+        //内容をオブジェクトにしたりしてcommentIdTimelineに追加したりする
+        fileAnalyzer.CSVparseAndPush(data);
 
-function caculateCommentCombo() {
-    let today = new Date();
-    let nowCommentCombo = 0;
+        if (fileLength === 0) {
+            console.log("ファイル読み込み終わり！！！！！！！！！！！！！！");
+            fileReadCount++;
 
-    //連続コメント数を分析
-    while (today.getFullYear() !== 2023) {
+            //すべてのファイルを読み込み終わっていたなら、コメント分析開始
+            if (fileInput.files.length === fileReadCount) {
+                //console.log(commentId);
+                //console.log(commentData);
 
-        //todayの日付があるか検索
-        const isCommentFound = allComment.some((element) =>
-            //Number(element[2].substr(0, 4)) === today.getFullYear() &&
-            //Number(element[2].substr(4, 2)) === today.getMonth() + 1 &&
-            //Number(element[2].substr(6, 2)) === today.getDate()
-            element[2].getFullYear() === today.getFullYear() &&
-            element[2].getMonth() === today.getMonth() &&
-            element[2].getDate() === today.getDate()
-        );
-        today.setDate(today.getDate() - 1);
-
-        if (isCommentFound) {
-            nowCommentCombo++;
-            //console.log(today + "にコメントされていました");
-
-            //現在の連続数が最大の連続数を超えたら
-            if (nowCommentCombo > commentCombo) {
-                commentCombo = nowCommentCombo;
+                commentAnalyzer.analyzeComments();
             }
-        } else {
-            nowCommentCombo = 0;
         }
+    },
 
-        //console.log(allComment[i][2].substr(0, 4) +"/"+ allComment[i][2].substr(5, 2) +"/"+ allComment[i][2].substr(8, 2));
+    //csvをパースしてコメントまとめ配列に追加
+    CSVparseAndPush(data) {
+        let result = [];//commentオブジェクトを全部入れた配列...みたいな？
+
+        let parsedData = Papa.parse(data)["data"];
+        parsedData.shift();//解説部分を消す
+
+        for (let i = 0; i < parsedData.length; i++) {
+            const comment = new Comment();
+            const tmpLast = parsedData[i].length - 1;//csvの行？がファイルごとに違ったりするから後ろから数えるときに使います
+
+            //謎の空白行を読み込まない（csv変換のやつ変えたから必要ないかも）
+            if (parsedData[i] || true) {
+                //YAJU&Uかどうか
+                if (parsedData[i][tmpLast - 2] === "niKAylKNIEI" || isYouTubeAllComment) {
+                    comment.commentId = parsedData[i][0];
+                    comment.channelId = parsedData[i][1];
+                    comment.date = new Date(parsedData[i][2]);
+                    comment.topCommentId = parsedData[i][tmpLast];
+
+                    let parsedText = "";
+                    JSON.parse("[" + parsedData[i][tmpLast - 1] + "]").forEach((element) => {
+                        parsedText = parsedText + element.text;
+                    })
+                    comment.text = parsedText;
+
+                    //theTrueResult[commentIndex][4] = convertUnkomojiretuToYarimasunemojiretu(theTrueResult[commentIndex][4]);
+                    //一時的（多分）に消してる
+
+                    //コメントカウント
+                    analyzeResult.comments += 1;
+                    if (comment.topCommentId !== "")
+                        analyzeResult.replies += 1;
+
+                    //コメントを配列に追加するとき、日付順にしたいので配列を挿入する位置を計算する
+                    let index = 0;
+                    if (commentId.length !== 0) {
+                        //↑commentIdになんも入ってない時はここをしない　エラーになるから
+
+                        //日付を比較してどの場所に追加するか決める
+                        while (getCommentByIndex(index) !== undefined && getCommentByIndex(index).date < comment.date) {
+                            index++;
+                        }
+                    }
+
+                    //コメント情報に追加
+                    commentData[comment.commentId] = comment;
+
+
+                    //↓返信コメントの表示は動的？にされるようになったから下の処理はしない
+
+                    //タイムライン配列に追加
+                    //if (comment.topCommentId === "" || true) {
+                    //通常コメント
+                    commentId.splice(index, 0, comment.commentId);
+                    /*} else {
+                        //親コメントがある場合
+                        if (alreadyTopComment.includes(comment.topCommentId) === false) {
+                            //親コメントがまだタイムライン配列に追加されてないなら
+                            commentId.splice(index, 0, comment.topCommentId);
+                            alreadyTopComment.push(comment.topCommentId);
+                        }
+                    }*/
+                }
+            }
+        }
     }
 }
 
+//整理されたコメントデータを使って連続数とかを分析して表示
+const commentAnalyzer = {
+
+    //コメントの分析を開始！
+    analyzeComments() {
+
+        console.log(commentId.length);
+
+
+        if (isRuby) {
+            console.log(commentId);
+        }
+
+        //前回の分析データとして保存を試みる
+        try {
+            localStorage.setItem("My_YAJU&U_comment", JSON.stringify({ commentId: commentId, commentData: commentData }));
+        } catch (error) {
+            alert(error);
+        }
+
+        document.getElementById("fileInputScreen").remove();
+        const el = document.querySelectorAll(".analyzePannel2")[0];
+        document.getElementById("analyzeScreen").style.display = "flex";
+
+        if (isYouTubeAllComment) {
+            el.children[0].innerText = ("YouTubeに合計 " + analyzeResult.comments + " コメントしました");
+        } else {
+            el.children[0].innerText = ("YAJU&Uに合計 " + analyzeResult.comments + " コメントしました");
+        }
+
+        el.children[1].innerText = ("（通常:" + (analyzeResult.comments - analyzeResult.replies) + " 返信:" + analyzeResult.replies + "）");
+
+        commentAnalyzer.caculateCommentCombo();
+        el.children[2].innerText = ("最高 " + analyzeResult.combo + " 日連続コメント");
+
+        commentAnalyzer.caculateCommentAverage();
+        el.children[3].innerText = ("一日平均 " + analyzeResult.average + " コメント");
+
+        if (isRuby) {
+            document.getElementById("backgroundImage").style.display = "block";
+        }
+        //createCommentHoursTable()
+
+
+        //親コメントと子コメントを紐づける
+        commentId.forEach((element) => {
+            //返信コメントかつ紐づけ配列にまだ無いなら
+            if (getCommentById(element).topCommentId !== "" && !Object.keys(topCommentWithMyComment).includes(getCommentById(element).topCommentId)) {
+                topCommentWithMyComment[getCommentById(element).topCommentId] = element;
+            }else{
+                topCommentWithMyComment[element] = undefined;//通常コメントとして出たので親コメントとしては出ない
+            }
+        })
+        console.log(topCommentWithMyComment);
+
+
+        timeliner.newTimeline();
+
+        console.warn(analyzeResult);
+    },
+
+    caculateCommentCombo() {
+        let checkDate = new Date();
+        let nowCommentCombo = 0;
+
+        //全部の日を調べて最大コメント連続日数を計算
+        while (checkDate.getFullYear() !== 2023) {
+
+            //checkDateの日付があるか検索
+            const isCommentFound = commentId.some((element) =>
+                getCommentById(element).date.getFullYear() === checkDate.getFullYear() &&
+                getCommentById(element).date.getMonth() === checkDate.getMonth() &&
+                getCommentById(element).date.getDate() === checkDate.getDate()
+            );
+
+            if (isCommentFound) {
+                nowCommentCombo++;
+                //現在の連続数が最大の連続数を超えたら、連続数を更新
+                if (nowCommentCombo > analyzeResult.combo) {
+                    analyzeResult.combo = nowCommentCombo;
+                }
+            } else {
+                //連続数途切れ
+                nowCommentCombo = 0;
+            }
+
+            //次の日も調べるために次の日にする
+            checkDate.setDate(checkDate.getDate() - 1);
+            //console.log(allComment[i][2].substr(0, 4) +"/"+ allComment[i][2].substr(5, 2) +"/"+ allComment[i][2].substr(8, 2));
+        }
+    },
+
+    caculateCommentAverage() {
+        const firstCommentDate = getCommentByIndex(0).date;
+        const lastCommentDate = getCommentByIndex(analyzeResult.comments - 1).date;
+        let commentCount = 0;
+
+        commentId.forEach((element) => {
+            if (firstCommentDate <= getCommentById(element).date && lastCommentDate >= getCommentById(element).date) {
+                commentCount++;
+            }
+        })
+
+        //コメントしてから現在（最後にコメントした日）の日数
+        const dayLength = Math.round((lastCommentDate.getTime() - firstCommentDate.getTime()) / (1000 * 60 * 60 * 24));
+        analyzeResult.average = Math.round((commentCount / dayLength) * 100) / 100;
+    }
+}
+
+const timeliner = {
+    nowIndex: 0,
+
+    //
+    resetTimelineDate() {
+        const sortSelectorElement = document.getElementById("timelineSortSelector");
+        const dateElement = document.getElementById("timelineDate");
+        if (sortSelectorElement.value === "older") {
+            const date = getCommentByIndex(0).date;
+            dateElement.value = date.toISOString().substring(0, 10);
+        } else if (sortSelectorElement.value === "newer") {
+            const date = getCommentByIndex(analyzeResult.comments - 1).date;
+            dateElement.value = date.toISOString().substring(0, 10);
+        }
+
+        if (sortSelectorElement.value === "random") {
+            dateElement.style.display = "none";
+        } else {
+            dateElement.style.display = "block";
+        }
+    },
+
+    //タイムラインの新しいページを表示するときに、表示するコメントIdを調べたりapi関係のそれをする
+    async timelineRequest() {
+        const timelineArray = [];//タイムラインに表示させたい最終的なコメントid達
+
+        let commentElementCount = 0;
+        while (commentElementCount < 20 && commentElementCount < analyzeResult.comments) {
+            const nowCommentId = commentId[timeliner.nowIndex];
+            const topCommentId = getCommentById(nowCommentId).topCommentId;
+
+            if (topCommentId === "") {
+                //通常コメントなら
+                timelineArray.push(nowCommentId);
+                commentElementCount++;
+            } else if (topCommentWithMyComment[topCommentId] === nowCommentId) {
+                //返信コメントだけど親コメントに結び付けられてるやつなら
+                timelineArray.push(topCommentId);
+                commentData[topCommentId] = { 
+                    channelId: undefined, commentId: topCommentId, text: "" 
+                };//コメントの情報がundefinedだとあれなので追加はしておく
+                commentElementCount++;
+            }
+            timeliner.nowIndex++;
+        }
+
+        const needChannelId = [];
+        const needCommentId = [];
+
+        //情報がまだない場合は取得しますね配列に入れる
+        timelineArray.forEach((element) => {
+            const comment = getCommentById(element);
+
+            if (channelData[comment.channelId] === undefined && !needChannelId.includes(comment.channelId)) {
+                //チャンネル情報
+                if (comment.channelId !== undefined)//エラーにならないようにとりあえず追加しといたchannelIdの場合はここで追加する必要はない
+                    needChannelId.push(comment.channelId);
+                    channelData[comment.channelId] = {handle: "削除済みコメント", icon: ""};
+
+                /*channelData[comment.channelId] = {
+                    handle: "@horihoriadwt",
+                    icon: "https://yt3.ggpht.com/fIsxN5NyFebZ1Tzpv92IVn4eRSKXfSZNtMP_mUUicii1dNHrFjXmdLD7S0X7CVNvVxhGlEyIcQ=s48-c-k-c0x00ffffff-no-rj"
+                }*/
+            }
+            if (commentData[comment.commentId].channelId === undefined && !needCommentId.includes(comment.commentId)) {
+                //コメント情報
+                needCommentId.push(comment.commentId);
+            }
+        })
+
+        //console.log(needChannelId);
+        //console.log(needCommentId.length);
+
+
+        if (needChannelId.length > 0 || needCommentId.length > 0) {
+            await fetch(["https://script.google.com/macros/s/AKfycbyVqCtriDqwdJu3PD6CmePkNssSOmwnHumG0qs-5JNkYN87LsYgKuyTlbsUEnpoz55K/exec"], {
+                "method": "POST",
+                /*"Access-Control-Allow-Origin": "*",*/
+                "body": JSON.stringify({
+                    "needChannelId": needChannelId,
+                    "needCommentId": needCommentId
+                }),
+                "Content-Type": "application/json"
+            })
+                .then(responce => {
+                    return responce.json();
+                })
+                .then(json => {
+                    console.warn(json);
+
+                    //jsonの処理
+                    Object.keys(json.channelData).forEach((element) => {
+                        channelData[element] = json.channelData[element];
+                    })
+                    Object.keys(json.commentData).forEach((element) => {
+                        commentData[element] = json.commentData[element];
+                        commentData[element].date = new Date(commentData[element].date);
+                        //親コメント投稿者のチャンネル情報もあるからそっちも
+                        channelData[json.commentData[element].channelId] = json.commentData[element].channelData;
+                    })
+                })
+        }
+
+        //console.log(channelData);
+        //console.log(commentData);
+
+        return timelineArray;
+    },
+
+
+    //新しくタイムラインを作り直す
+    async newTimeline() {
+        console.log("timeline");
+
+        await timeliner.resetTimelineDate();
+
+        const el = await document.getElementById("timelineCommentWrapper");
+        el.innerHTML = "";
+
+        //日付のやつはジャンプに置き換わった
+        /*const dateSelectorValue = document.getElementById("timelineDate").value;
+        const selectedDate = new Date("2020-1-1T00:00:00");
+        selectedDate.setFullYear(dateSelectorValue.substring(0, 4));
+        selectedDate.setMonth(dateSelectorValue.substring(5, 7) - 1);
+        selectedDate.setDate(dateSelectorValue.substring(8, 10));*/
+        //console.log(timelineValue);
+
+        //選択した日付からのコメントのindexを求める  
+        /*const sort = document.getElementById("timelineSortSelector").value;
+        if (sort === "older") {
+            timelineNowIndex = 0;
+            commentId.forEach((element, index) => {
+                if (element[2] <= selectedDate) {
+                    timelineNowIndex = index + 1;
+                }
+            })
+        } else if (sort === "newer") {
+            timelineNowIndex = analyzeResult.comments;
+            selectedDate.setHours(23);
+            selectedDate.setMinutes(59);
+            selectedDate.setMilliseconds(999);
+            commentId.forEach((element, index) => {
+                if (element[2] <= selectedDate) {
+                    timelineNowIndex = index - 1;
+                }
+            })
+        }*/
+
+        const timelineArray = await timeliner.timelineRequest();
+
+        //createTimelineElements();
+        //console.warn("create!");
+        timeliner.createTimelineElements(timelineArray);
+    },
+
+    createTimelineElements(array) {
+        const wrapper = document.getElementById("timelineCommentWrapper");
+
+        array.forEach((element) => {
+            createCommentElement(wrapper, getCommentById(element))
+        })
+    }
+}
+
+
+
+//ここからはじまる
+document.getElementById("analyzeButton").onclick = fileAnalyzer.start;
+fileInput.addEventListener("change", fileAnalyzer.start, false);
+
+
+//分析結果コピーボタン
 document.getElementById("copyTextButton").onclick = function () {
     const el = document.querySelectorAll(".analyzePannel2")[0];
 
@@ -262,201 +481,70 @@ document.getElementById("copyTextButton").onclick = function () {
 };
 
 
+//ランダムな数字を返すTDN便利な関数
 function getRandomNumber(min, max) {
     return Math.floor(Math.random() * (max - min) + min);
 }
 
 
-function getRandomComment() {
-    const number = getRandomNumber(0, allComment.length);
-    //console.log(number);
-
-    const random = document.getElementById("randomComment");
-    //random.href = "https://www.youtube.com/watch?v=niKAylKNIEI&lc=" + allComment[number][0];
-    //random.innerText = allComment[number][4];
-
-    random.children[2].remove();
-    createCommentElement(random, allComment[number], 2);
-}
-
-//document.getElementById("changeRandomCommentButton").onclick = getRandomComment;
-
-
-function startFileRead() {
-    if (fileInput.files.length === 0) {
-        //ファイルが選択されていない
-        alert("ファイル選択して、どうぞ");
-        return;
-    }
-
-    let isTakeoutFile;
-    if (isRuby) {
-        isTakeoutFile = window.confirm("Takeoutファイルですか？");
-    } else {
-        isTakeoutFile = true;
-    }
-    isYouTubeAllComment = window.confirm("YAJU&U以外のコメントも表示しますか？");
-
-    /*const analyzeButton = document.getElementById("analyzeButton");
-    analyzeButton.innerText = "分析中";
-    analyzeButton.style = "background-color: gray; touch-action: none;";*/
-    document.getElementById("fileInputWrapper").innerHTML = "読み込み中";
-
-    //選択されたすべてのファイルを読む
-    for (let i = 0; i < fileInput.files.length; i++) {
-        const file = fileInput.files[i];
-        readfile(file, isTakeoutFile);
-    }
-}
-
-
-function caculateOldestComment() {
-    const el = document.getElementById("oldestComment");
-    let oldestDate = 99999999999999;
-
-    allComment.forEach((element, index) => {
-        if (element[2] < oldestDate) {
-            oldestCommentIndex = index;
-            oldestDate = element[2];
-        }
-    })
-
-    //el.href = "https://www.youtube.com/watch?v=niKAylKNIEI&lc=" + allComment[oldestCommentIndex][0];
-    //el.innerText = allComment[oldestCommentIndex][4];
-    //createCommentElement(el, allComment[oldestCommentIndex], 2);
-}
-
-
-function caculateCommentAverage() {
-    const firstCommentDate = allComment[oldestCommentIndex][2];
-    const lastCommentDate = allComment[getNewestCommentIndex()][2];
-    let commentCount = 0;
-
-    allComment.forEach((element) => {
-        if (firstCommentDate <= element[2] && lastCommentDate >= element[2]) {
-            commentCount++;
-        }
-    })
-
-    //コメントしてから現在（最後にコメントした日）の日数
-    const dayLength = Math.round((lastCommentDate.getTime() - firstCommentDate.getTime()) / (1000 * 60 * 60 * 24));
-    commentAverage = Math.round((commentCount / dayLength) * 100) / 100;
-}
-
-
-function getNewestCommentIndex() {
-    let newestDate = 0;
-    let newestCommentIndex;
-
-    allComment.forEach((element, index) => {
-        if (element[2] > newestDate) {
-            newestCommentIndex = index;
-            newestDate = element[2];
-        }
-    })
-
-    return newestCommentIndex;
-}
-
-
-function createCommentElement(parentElement, array, type) {
+function createCommentElement(parentElement, comment) {
     const container = document.createElement("div");
-    if (type === 1) {
-        container.classList.add("commentContainer");
-    } else {
-        container.classList.add("commentContainer2");
-    }
-    const textP = document.createElement("p");
-    textP.innerText = array[4];
-    textP.style = "color: white; overflow-wrap: break-word; white-space: pre-wrap; word-wrap: break-word;"
+    container.classList.add("commentContainer");
+    const channelIcon = document.createElement("img");
+    channelIcon.classList.add("channelIcon");
+    channelIcon.src = channelData[comment.channelId].icon;
+    const textContainer = document.createElement("div");
+    textContainer.classList.add("commentTextContainer");
+    const handleAndDate = document.createElement("p");
+    handleAndDate.innerText = generateTimeText(comment.date) + "・" + channelData[comment.channelId].handle;
+    handleAndDate.classList.add("handleAndDate");
+    const text = document.createElement("p");
+    text.innerText = comment.text;
+    text.style = "color: white; overflow-wrap: break-word; white-space: pre-wrap; word-wrap: break-word;"
     const a = document.createElement("a");
-    if (array[3] === "") {
+    if (comment.topCommentId === "") {
         a.innerText = "コメントに移動";
     } else {
         a.innerText = "返信に移動";
     }
-    a.href = "https://www.youtube.com/watch?v=niKAylKNIEI&lc=" + array[0];
+    a.href = "https://www.youtube.com/watch?v=niKAylKNIEI&lc=" + comment.commentId;
     a.target = "_blank";
     a.style = "white-space: nowrap;"
-    const about = document.createElement("span");
-    //about.innerText = " " + array[2].getFullYear() + "/" + array[2].getMonth() + "/" + array[2].getDate() + " " + array[2].getHours() + ":" + array[2].getMinutes() + ":" + array[2].getSeconds();
-    about.innerText = array[2].toLocaleString();
-    about.style = "margin: 0 0 0 8px; color: gray; white-space: nowrap;"
+    /*const about = document.createElement("span");
+    about.innerText = " " + array[2].getFullYear() + "/" + array[2].getMonth() + "/" + array[2].getDate() + " " + array[2].getHours() + ":" + array[2].getMinutes() + ":" + array[2].getSeconds();
+    about.innerText = comment.date.toLocaleString();
+    about.style = "margin: 0 0 0 8px; color: gray; white-space: nowrap;"*/
 
     const rowDiv = document.createElement("div");
     rowDiv.style = "word-break: break-word;";
 
     parentElement.appendChild(container);
-    container.appendChild(textP);
-    container.appendChild(rowDiv);
+    container.appendChild(channelIcon);
+    container.appendChild(textContainer);
+    textContainer.appendChild(handleAndDate);
+    textContainer.appendChild(text);
+    textContainer.appendChild(rowDiv);
     rowDiv.appendChild(a);
-    rowDiv.appendChild(about);
+    //rowDiv.appendChild(about);
 }
 
 
-function timeline() {
-    console.log("timeline");
 
-    const el = document.getElementById("timelineCommentWrapper");
-    el.innerHTML = "";
-    const dateSelectorValue = document.getElementById("timelineDate").value;
-    const selectedDate = new Date("2020-1-1T00:00:00");
-    selectedDate.setFullYear(dateSelectorValue.substring(0, 4));
-    selectedDate.setMonth(dateSelectorValue.substring(5, 7) - 1);
-    selectedDate.setDate(dateSelectorValue.substring(8, 10));
-    //console.log(timelineValue);
-
-    //選択した日付からのコメントのindexを求める    
-    const sort = document.getElementById("timelineSortSelector").value;
-    if (sort === "older") {
-        timelineNowIndex = 0;
-        allComment.forEach((element, index) => {
-            if (element[2] <= selectedDate) {
-                timelineNowIndex = index + 1;
-            }
-        })
-    } else if (sort === "newer") {
-        timelineNowIndex = allComment.length;
-        selectedDate.setHours(23);
-        selectedDate.setMinutes(59);
-        selectedDate.setMilliseconds(999);
-        allComment.forEach((element, index) => {
-            if (element[2] <= selectedDate) {
-                timelineNowIndex = index - 1;
-            }
-        })
-    }
-
-    createTimeline();
-}
-
-document.getElementById("timelineSortSelector").addEventListener("change", function () {
-    setTimelineDate();
-}, false)
-function setTimelineDate() {
-    const sortSelectorElement = document.getElementById("timelineSortSelector");
-    const dateElement = document.getElementById("timelineDate");
-    if (sortSelectorElement.value === "older") {
-        const date = allComment[oldestCommentIndex][2];
-        dateElement.value = date.toISOString().substring(0, 10);
-    } else if (sortSelectorElement.value === "newer") {
-        const date = allComment[getNewestCommentIndex()][2];
-        dateElement.value = date.toISOString().substring(0, 10);
-    }
-
-    if (sortSelectorElement.value === "random") {
-        dateElement.style.display = "none";
-    } else {
-        dateElement.style.display = "block";
-    }
-}
+//下のやつがresetTimelineもやってくれるからこっちは要らないかも？
+/*document.getElementById("timelineSortSelector").addEventListener("change", function () {
+    //console.log("sortselectorChange");
+    
+    timelineManager.resetTimelineDate();
+}, false)*/
 
 document.getElementById("timeline").addEventListener("change", function (e) {
-    timeline();
+    //console.log("timelineChange");
+    newTimeline();
 }, false)
 
 
-function createTimeline() {
+//タイムラインを実際に表示させる
+function createTimelineElements() {
     const el = document.getElementById("timelineCommentWrapper");
     const filter = document.getElementById("timelineFilterSelector").value;
     const sort = document.getElementById("timelineSortSelector").value;
@@ -464,19 +552,19 @@ function createTimeline() {
     let index = timelineNowIndex;
     for (let i = timelineNowIndex; i < timelineNowIndex + 50; i++) {
         if (sort === "random") {
-            index = getRandomNumber(0, allComment.length);
+            index = getRandomNumber(0, analyzeResult.comments);
         }
 
         if (filter === "comment") {
-            if (allComment[index][3] === "") {
-                createCommentElement(el, allComment[index], 1);
+            if (commentId[index][3] === "") {
+                createCommentElement(el, commentId[index]);
             }
         } else if (filter === "reply") {
-            if (allComment[index][3] !== "") {
-                createCommentElement(el, allComment[index], 1);
+            if (commentId[index][3] !== "") {
+                createCommentElement(el, commentId[index]);
             }
         } else {
-            createCommentElement(el, allComment[index], 1);
+            createCommentElement(el, commentId[index]);
         }
 
         if (sort === "older") {
@@ -493,9 +581,10 @@ function createTimeline() {
     }
 }
 
-document.getElementById("timelineMoreButton").onclick = createTimeline;
+document.getElementById("timelineMoreButton").onclick = createTimelineElements;
 
 
+//え？
 function convertUnkomojiretuToYarimasunemojiretu(inputArray) {
     inputArray.forEach((element, index) => {
         let result;
@@ -534,14 +623,14 @@ function useLastFile() {
     } else {
         document.getElementById("fileInputWrapper").innerHTML = "読み込み中";
 
-        allComment = JSON.parse(getArray);
+        commentId = JSON.parse(getArray);
 
         //日付のデータが文字列になっちゃってるから直す
-        allComment.forEach((element, index) => {
-            allComment[index][2] = new Date(element[2]);
+        commentId.forEach((element, index) => {
+            commentId[index][2] = new Date(element[2]);
         })
 
-        startAnalyze();
+        commentAnalyzer.analyzeComments();
     }
 }
 
@@ -567,7 +656,7 @@ function createCommentHoursTable() {
     }
 
     let commentHoursTable = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    allComment.forEach((element) => {
+    commentId.forEach((element) => {
         commentHoursTable[element[2].getHours()]++;
     })
 
@@ -657,14 +746,58 @@ function yajuhaiCSVConvert(data) {
     }
 
     //console.log(result);
-    allComment = result.reverse();
+    commentId = result.reverse();
 
     //日付のデータが文字列になっちゃってるから直す
-    allComment.forEach((element, index) => {
-        allComment[index][2] = new Date(element[2]);
+    commentId.forEach((element, index) => {
+        commentId[index][2] = new Date(element[2]);
     })
 
-    startAnalyze();
+    commentAnalyzer.analyzeComments();
+}
+
+
+
+function generateTimeText(date) {
+    //return "テスト中";
+    
+    if(date === undefined)
+        return "不明";
+
+    let text = "";
+    const today = new Date();
+    let year = 0;
+    let month = 0;
+
+    const checker = new Date();
+    checker.setTime(today.getTime() - date.getTime());
+
+    //年
+    year = checker.getFullYear() - 1970;
+    if (year >= 1) {
+        text = text + year + "年";
+    }
+    month = checker.getMonth();
+    if (year >= 1 || month > 0) {
+        //月
+        if (month !== 0)
+            text = text + month + "か月";
+    } else {
+        //日
+        text = text + (checker.getDate() - 1) + "日";
+    }
+
+    return text + "前";
+}
+
+
+
+function getCommentById(id) {
+    return commentData[id];
+}
+
+function getCommentByIndex(index) {
+    return commentData[commentId[index]];
 }
 
 
@@ -685,4 +818,8 @@ allComment
 [2]日付
 [3]親コメントid
 [4]本文
+*/
+
+/*
+最古のコメが最初、最新のコメが最後
 */

@@ -112,21 +112,14 @@ p {
     width: 100%;
 }
 
-.commentContainer {
-    /*background-color: white;*/
-    padding: 12px 0px;
-    margin: 4px 0;
-    /*border-radius: 12px;*/
-    /*box-shadow: 0 2px 0 0 rgb(145, 94, 35);*/
-}
 
-.commentContainer2 {
+/*.commentContainer2 {
     background-color: rgb(45, 45, 45);
     padding: 16px 20px;
     margin: 4px 0;
     border-radius: 12px;
-    /*box-shadow: 0 2px 0 0 rgb(145, 94, 35);*/
-}
+    /*box-shadow: 0 2px 0 0 rgb(145, 94, 35);/
+}*/
 
 #timelineDate {
     border: 0;
@@ -223,4 +216,34 @@ select::placeholder{
     margin: 2px;
     color: black;
     border-radius: 0 4px 4px 0;
+}
+
+
+.commentTextContainer {
+    /*background-color: white;*/
+    /*padding: 12px 0px;
+    margin: 4px 0;*/
+    /*border-radius: 12px;*/
+    /*box-shadow: 0 2px 0 0 rgb(145, 94, 35);*/
+    flex-grow: 1;
+}
+.handleAndDate{
+    color: gray;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.commentContainer{
+    display: flex;
+    flex-direction: row;
+    padding: 6px 0px;
+    margin: 2px 0;
+}
+.channelIcon{
+    background-color: rgb(0, 0, 0);
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    margin: 8px;
+    flex-shrink: 0;
 }
