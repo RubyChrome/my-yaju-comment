@@ -4,14 +4,15 @@ let timelineNowIndex = 0;
 const fileInput = document.getElementById("fileInput");
 const isRuby = false;
 
-const commentId = [];//日付順に並べたコメントid　　返信コメidは無く親コメidだけが入ってたりなどタイムライン用のもの
+const commentId = [];//日付順に並べた自分のコメントid　返信の親コメントは無い
 const commentData = {};//コメid：　コメントデータ
-const channelData = {};//チャンネルid：　ハンドル、アイコン
+const channelData = {
+    "unknown": {
+        handle: "削除済み",
+        icon: ""
+    }
+};//チャンネルid：　ハンドル、アイコン
 
-const topCommentWithMyComment = {};//親コメントid：　子コメントid
-
-//下のやつは未使用
-const alreadyTopComment = [];//タイムライン配列作るとき用　　同じ親コメントが何個もタイムラインに出ないようにするため
 
 const analyzeResult = {
     comments: 0,//返信含め全コメント
@@ -228,20 +229,23 @@ const commentAnalyzer = {
         }
         //createCommentHoursTable()
 
+        const topCommentWithMyComment = [];//すでにどれかと紐づけ済みか確認
 
         //親コメントと子コメントを紐づける
         commentId.forEach((element) => {
             //返信コメントかつ紐づけ配列にまだ無いなら
-            if (getCommentById(element).topCommentId !== "" && !Object.keys(topCommentWithMyComment).includes(getCommentById(element).topCommentId)) {
-                topCommentWithMyComment[getCommentById(element).topCommentId] = element;
-            }else{
-                topCommentWithMyComment[element] = undefined;//通常コメントとして出たので親コメントとしては出ない
+            if (getCommentById(element).topCommentId !== "" && !topCommentWithMyComment.includes(getCommentById(element).topCommentId)) {
+                getCommentById(element).showAsTopcomment = true;//紐づける
+                topCommentWithMyComment.push(getCommentById(element).topCommentId);//すでに紐づけ済みですよ
+            } else {
+                topCommentWithMyComment.push(element);//親コメントとして出現済みなので出ませんよ
             }
         })
-        console.log(topCommentWithMyComment);
+        //console.log(topCommentWithMyComment);
 
 
-        timeliner.newTimeline();
+        timeliner.resetDate();
+        timeliner.pageChange(true);
 
         console.warn(analyzeResult);
     },
@@ -295,10 +299,11 @@ const commentAnalyzer = {
 }
 
 const timeliner = {
-    nowIndex: 0,
+    nextIndex: 0,//次のページの開始位置
+    backIndex: 0,//ページ戻るときの開始位置
 
     //
-    resetTimelineDate() {
+    resetDate() {
         const sortSelectorElement = document.getElementById("timelineSortSelector");
         const dateElement = document.getElementById("timelineDate");
         if (sortSelectorElement.value === "older") {
@@ -314,31 +319,62 @@ const timeliner = {
         } else {
             dateElement.style.display = "block";
         }
+
+        dateElement.min = getCommentByIndex(0).date.toISOString().substring(0, 10);
+        dateElement.max = getCommentByIndex(analyzeResult.comments - 1).date.toISOString().substring(0, 10);
     },
 
     //タイムラインの新しいページを表示するときに、表示するコメントIdを調べたりapi関係のそれをする
-    async timelineRequest() {
+    async timelineRequest(isGoNextpage) {
         const timelineArray = [];//タイムラインに表示させたい最終的なコメントid達
 
         let commentElementCount = 0;
-        while (commentElementCount < 20 && commentElementCount < analyzeResult.comments) {
-            const nowCommentId = commentId[timeliner.nowIndex];
+
+        let nowIndex;
+        if (isGoNextpage) {
+            nowIndex = timeliner.nextIndex;
+            timeliner.backIndex = nowIndex - 1;
+        } else {
+            nowIndex = timeliner.backIndex;
+            timeliner.nextIndex = nowIndex + 1;
+        }
+
+        //console.log(nowIndex);
+
+        //20コメント表示、または端につくまで
+        while (commentElementCount < 20 && nowIndex < analyzeResult.comments && 0 <= nowIndex) {
+            //console.log("while");
+
+            const nowCommentId = getCommentByIndex(nowIndex).commentId;
             const topCommentId = getCommentById(nowCommentId).topCommentId;
 
             if (topCommentId === "") {
                 //通常コメントなら
                 timelineArray.push(nowCommentId);
                 commentElementCount++;
-            } else if (topCommentWithMyComment[topCommentId] === nowCommentId) {
+            } else if (getCommentById(nowCommentId).showAsTopcomment === true) {
                 //返信コメントだけど親コメントに結び付けられてるやつなら
                 timelineArray.push(topCommentId);
-                commentData[topCommentId] = { 
-                    channelId: undefined, commentId: topCommentId, text: "" 
-                };//コメントの情報がundefinedだとあれなので追加はしておく
+                if (getCommentById(topCommentId) === undefined)
+                    commentData[topCommentId] = {
+                        channelId: undefined, commentId: topCommentId, text: ""
+                    };//コメントの情報がundefinedだとあれなので追加はしておく
                 commentElementCount++;
             }
-            timeliner.nowIndex++;
+
+            if (isGoNextpage) {
+                nowIndex++;
+            } else {
+                nowIndex--;
+            }
         }
+
+        if (isGoNextpage) {
+            timeliner.nextIndex = nowIndex;
+        } else {
+            timeliner.backIndex = nowIndex;
+        }
+
 
         const needChannelId = [];
         const needCommentId = [];
@@ -351,7 +387,7 @@ const timeliner = {
                 //チャンネル情報
                 if (comment.channelId !== undefined)//エラーにならないようにとりあえず追加しといたchannelIdの場合はここで追加する必要はない
                     needChannelId.push(comment.channelId);
-                    channelData[comment.channelId] = {handle: "削除済みコメント", icon: ""};
+                //channelData[comment.channelId] = { handle: "削除済みコメント", icon: "" };
 
                 /*channelData[comment.channelId] = {
                     handle: "@horihoriadwt",
@@ -361,6 +397,8 @@ const timeliner = {
             if (commentData[comment.commentId].channelId === undefined && !needCommentId.includes(comment.commentId)) {
                 //コメント情報
                 needCommentId.push(comment.commentId);
+                commentData[comment.commentId].channelId = "unknown";
+
             }
         })
 
@@ -369,6 +407,8 @@ const timeliner = {
 
 
         if (needChannelId.length > 0 || needCommentId.length > 0) {
+            console.log("fetch");
+
             await fetch(["https://script.google.com/macros/s/AKfycbyVqCtriDqwdJu3PD6CmePkNssSOmwnHumG0qs-5JNkYN87LsYgKuyTlbsUEnpoz55K/exec"], {
                 "method": "POST",
                 /*"Access-Control-Allow-Origin": "*",*/
@@ -404,14 +444,12 @@ const timeliner = {
     },
 
 
-    //新しくタイムラインを作り直す
-    async newTimeline() {
+    //別ページに移動
+    async pageChange(isGoNextpage) {//nextは次のページに行くならtrue、前のページに行くならfalse
         console.log("timeline");
 
-        await timeliner.resetTimelineDate();
-
         const el = await document.getElementById("timelineCommentWrapper");
-        el.innerHTML = "";
+        el.innerHTML = "読み込み中";
 
         //日付のやつはジャンプに置き換わった
         /*const dateSelectorValue = document.getElementById("timelineDate").value;
@@ -442,19 +480,40 @@ const timeliner = {
             })
         }*/
 
-        const timelineArray = await timeliner.timelineRequest();
+        const timelineArray = await timeliner.timelineRequest(isGoNextpage);
 
         //createTimelineElements();
         //console.warn("create!");
-        timeliner.createTimelineElements(timelineArray);
+        timeliner.createTimelineElements(timelineArray, isGoNextpage);
     },
 
-    createTimelineElements(array) {
+    createTimelineElements(array, isGoNextpage) {
         const wrapper = document.getElementById("timelineCommentWrapper");
 
-        array.forEach((element) => {
-            createCommentElement(wrapper, getCommentById(element))
-        })
+        if (isGoNextpage) {
+            array.forEach((element) => {
+                wrapper.appendChild(createCommentElement(getCommentById(element)));
+            })
+        } else {
+            array.forEach((element) => {
+                wrapper.prepend(createCommentElement(getCommentById(element)));
+            })
+        }
+    },
+
+    jumpDate(value){
+        const date = new Date(value);
+        let checkDate = 0;
+        let index;
+
+        for(let i = 0; checkDate < date; i++){
+            checkDate = getCommentByIndex(i).date;
+            index = i;
+        }
+
+        timeliner.nextIndex = index;
+        timeliner.backIndex = index - 1;
+        timeliner.pageChange(true);
     }
 }
 
@@ -486,8 +545,8 @@ function getRandomNumber(min, max) {
     return Math.floor(Math.random() * (max - min) + min);
 }
 
-
-function createCommentElement(parentElement, comment) {
+//コメント要素を生成して返す
+function createCommentElement(comment) {
     const container = document.createElement("div");
     container.classList.add("commentContainer");
     const channelIcon = document.createElement("img");
@@ -502,7 +561,7 @@ function createCommentElement(parentElement, comment) {
     text.innerText = comment.text;
     text.style = "color: white; overflow-wrap: break-word; white-space: pre-wrap; word-wrap: break-word;"
     const a = document.createElement("a");
-    if (comment.topCommentId === "") {
+    if (comment.topCommentId === "" || true) {
         a.innerText = "コメントに移動";
     } else {
         a.innerText = "返信に移動";
@@ -518,7 +577,7 @@ function createCommentElement(parentElement, comment) {
     const rowDiv = document.createElement("div");
     rowDiv.style = "word-break: break-word;";
 
-    parentElement.appendChild(container);
+    //parentElement.appendChild(container);
     container.appendChild(channelIcon);
     container.appendChild(textContainer);
     textContainer.appendChild(handleAndDate);
@@ -526,6 +585,8 @@ function createCommentElement(parentElement, comment) {
     textContainer.appendChild(rowDiv);
     rowDiv.appendChild(a);
     //rowDiv.appendChild(about);
+
+    return container;
 }
 
 
@@ -537,11 +598,15 @@ function createCommentElement(parentElement, comment) {
     timelineManager.resetTimelineDate();
 }, false)*/
 
-document.getElementById("timeline").addEventListener("change", function (e) {
-    //console.log("timelineChange");
-    newTimeline();
+document.getElementById("timelineDate").addEventListener("change", function (e) {
+    timeliner.jumpDate(e.currentTarget.value);
 }, false)
-
+document.getElementById("timelinePreviousPage").addEventListener("click", function (e) {
+    timeliner.pageChange(false);
+}, false)
+document.getElementById("timelineNextPage").addEventListener("click", function (e) {
+    timeliner.pageChange(true);
+}, false)
 
 //タイムラインを実際に表示させる
 function createTimelineElements() {
@@ -757,11 +822,11 @@ function yajuhaiCSVConvert(data) {
 }
 
 
-
+//～年～か月前の文章を生成
 function generateTimeText(date) {
     //return "テスト中";
-    
-    if(date === undefined)
+
+    if (date === undefined)
         return "不明";
 
     let text = "";
