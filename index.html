@@ -26,7 +26,8 @@
             <div id="howToUse">
                 <p><a href="https://youtu.be/cdhph6QHrsU" target="_blank">説明動画</a></p>
                 <h2>使い方</h2>
-                <p><a href="https://takeout.google.com/settings/takeout/custom/youtube" target="_blank">Google データ エクスポート</a>に行く</p>
+                <p><a href="https://takeout.google.com/settings/takeout/custom/youtube" target="_blank">Google データ
+                        エクスポート</a>に行く</p>
                 <p>「YouTubeのすべてのデータが含まれます」を押して、「コメント」のみが選択された状態にする</p>
                 <p>次のステップに行き、エクスポートを作成を押す（容量はそんなに大きくならないはず）</p>
                 <p>そのままサブ垢やブランドアカウントに切り替える（タブは開きっぱなしでいい）</p>
@@ -81,6 +82,19 @@
                 <button id="timelineNextPage">次へ</button>
                 <div id="timelineCommentWrapper"></div>
                 <button class="pannelButton" id="timelineMoreButton">もっと見る</button>
+            </div>
+            <div id="commentDetailScreen" style="display: none">
+                <div style="display: flex; flex-direction: row; margin-bottom: 20px;">
+                    <button id="closeDetailScreenButton">戻る</button>
+                    <h2 style="margin: 0">コメントの詳細</h2>
+                </div>
+                <div id="detailCommentWrapper"></div>
+                <div style="display: flex; flex-direction: column; margin-bottom: 20px;">
+                    <p>2026/05/25 19:19:19</p>
+                    <button id="jumpDetailCommentDateButton">コメントされた時刻に移動</button>
+                    <button id="showDetailCommentInYouTube">YouTubeで表示</button>
+                </div>
+                <div id="repliesWrapper"></div>
             </div>
         </div>
     </div>

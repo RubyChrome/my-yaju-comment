@@ -47,7 +47,8 @@ const fileAnalyzer = {
         } else {
             isTakeoutFile = true;
         }
-        isYouTubeAllComment = window.confirm("YAJU&U以外のコメントも表示しますか？");
+        //isYouTubeAllComment = window.confirm("YAJU&U以外のコメントも表示しますか？");
+        isYouTubeAllComment = false;
 
         /*const analyzeButton = document.getElementById("analyzeButton");
         analyzeButton.innerText = "分析中";
@@ -301,6 +302,7 @@ const commentAnalyzer = {
 const timeliner = {
     nextIndex: 0,//次のページの開始位置
     backIndex: 0,//ページ戻るときの開始位置
+    nowDetailComment: undefined,
 
     //
     resetDate() {
@@ -402,10 +404,6 @@ const timeliner = {
             }
         })
 
-        //console.log(needChannelId);
-        //console.log(needCommentId.length);
-
-
         if (needChannelId.length > 0 || needCommentId.length > 0) {
             console.log("fetch");
 
@@ -413,6 +411,7 @@ const timeliner = {
                 "method": "POST",
                 /*"Access-Control-Allow-Origin": "*",*/
                 "body": JSON.stringify({
+                    "type": "newPage",
                     "needChannelId": needChannelId,
                     "needCommentId": needCommentId
                 }),
@@ -433,12 +432,10 @@ const timeliner = {
                         commentData[element].date = new Date(commentData[element].date);
                         //親コメント投稿者のチャンネル情報もあるからそっちも
                         channelData[json.commentData[element].channelId] = json.commentData[element].channelData;
+                        delete commentData[element].channelData;
                     })
                 })
         }
-
-        //console.log(channelData);
-        //console.log(commentData);
 
         return timelineArray;
     },
@@ -450,35 +447,6 @@ const timeliner = {
 
         const el = await document.getElementById("timelineCommentWrapper");
         el.innerHTML = "読み込み中";
-
-        //日付のやつはジャンプに置き換わった
-        /*const dateSelectorValue = document.getElementById("timelineDate").value;
-        const selectedDate = new Date("2020-1-1T00:00:00");
-        selectedDate.setFullYear(dateSelectorValue.substring(0, 4));
-        selectedDate.setMonth(dateSelectorValue.substring(5, 7) - 1);
-        selectedDate.setDate(dateSelectorValue.substring(8, 10));*/
-        //console.log(timelineValue);
-
-        //選択した日付からのコメントのindexを求める  
-        /*const sort = document.getElementById("timelineSortSelector").value;
-        if (sort === "older") {
-            timelineNowIndex = 0;
-            commentId.forEach((element, index) => {
-                if (element[2] <= selectedDate) {
-                    timelineNowIndex = index + 1;
-                }
-            })
-        } else if (sort === "newer") {
-            timelineNowIndex = analyzeResult.comments;
-            selectedDate.setHours(23);
-            selectedDate.setMinutes(59);
-            selectedDate.setMilliseconds(999);
-            commentId.forEach((element, index) => {
-                if (element[2] <= selectedDate) {
-                    timelineNowIndex = index - 1;
-                }
-            })
-        }*/
 
         const timelineArray = await timeliner.timelineRequest(isGoNextpage);
 
@@ -501,12 +469,12 @@ const timeliner = {
         }
     },
 
-    jumpDate(value){
+    jumpDate(value) {
         const date = new Date(value);
         let checkDate = 0;
         let index;
 
-        for(let i = 0; checkDate < date; i++){
+        for (let i = 0; checkDate < date; i++) {
             checkDate = getCommentByIndex(i).date;
             index = i;
         }
@@ -514,6 +482,55 @@ const timeliner = {
         timeliner.nextIndex = index;
         timeliner.backIndex = index - 1;
         timeliner.pageChange(true);
+    },
+
+    async showDetail(commentId) {
+        const comment = getCommentById(commentId);
+        timeliner.nowDetailComment = comment;
+        //console.error(commentId);
+
+        document.getElementById("commentDetailScreen").style.display = "block";
+        const commentWrapper = document.getElementById("detailCommentWrapper");
+        commentWrapper.innerHTML = "";
+        commentWrapper.appendChild(createCommentElement(comment, true));
+
+        const repliesWrapper = document.getElementById("repliesWrapper");
+        repliesWrapper.innerHTML = "";
+
+        //返信がまだ取得できてないなら
+        if (comment.repliesId === undefined) {
+            //awaitでfetchとかして返信データを取得とか
+            await fetch(["https://script.google.com/macros/s/AKfycbyVqCtriDqwdJu3PD6CmePkNssSOmwnHumG0qs-5JNkYN87LsYgKuyTlbsUEnpoz55K/exec"], {
+                "method": "POST",
+                "body": JSON.stringify({
+                    "type": "getReplies",
+                    "topCommentId": commentId,
+                }),
+                "Content-Type": "application/json"
+            })
+                .then(responce => {
+                    return responce.json();
+                })
+                .then(json => {
+                    console.warn(json);
+                    comment.repliesId = [];
+
+                    //jsonの処理
+                    json.forEach((element) => {
+                        channelData[element.channelId] = element.channelData;
+
+                        commentData[element.commentId] = element;
+                        commentData[element.commentId].date = new Date(commentData[element.commentId].date);
+                        delete commentData[element.commentId].channelData;
+                        comment.repliesId.push(element.commentId);
+                    })
+                })
+        }
+
+        //返信を表示
+        await comment.repliesId.forEach((element) => {
+            repliesWrapper.appendChild(createCommentElement(getCommentById(element), true));
+        })
     }
 }
 
@@ -523,6 +540,24 @@ const timeliner = {
 document.getElementById("analyzeButton").onclick = fileAnalyzer.start;
 fileInput.addEventListener("change", fileAnalyzer.start, false);
 
+
+//コメント詳細画面閉じる
+document.getElementById("closeDetailScreenButton").addEventListener("click", closeDetailScreen);
+function closeDetailScreen(){
+    document.getElementById("commentDetailScreen").style.display = "none";
+}
+//コメントの時刻に移動
+document.getElementById("jumpDetailCommentDateButton").addEventListener("click", function(e){
+    closeDetailScreen();
+    timeliner.jumpDate(timeliner.nowDetailComment.date);
+});
+//YouTubeでコメントを見る
+document.getElementById("showDetailCommentInYouTube").addEventListener("click", function(e){
+    const a = document.createElement("a");
+    a.href = "https://www.youtube.com/watch?v=niKAylKNIEI&lc=" + timeliner.nowDetailComment.commentId;
+    a.target = "_blank";
+    a.click();
+});
 
 //分析結果コピーボタン
 document.getElementById("copyTextButton").onclick = function () {
@@ -546,9 +581,13 @@ function getRandomNumber(min, max) {
 }
 
 //コメント要素を生成して返す
-function createCommentElement(comment) {
+function createCommentElement(comment, isHideDetailButton) {
+    if(comment.channelId === "unknown")
+        isHideDetailButton = true;
+
     const container = document.createElement("div");
     container.classList.add("commentContainer");
+    container.dataset.commentid = comment.commentId;
     const channelIcon = document.createElement("img");
     channelIcon.classList.add("channelIcon");
     channelIcon.src = channelData[comment.channelId].icon;
@@ -560,30 +599,38 @@ function createCommentElement(comment) {
     const text = document.createElement("p");
     text.innerText = comment.text;
     text.style = "color: white; overflow-wrap: break-word; white-space: pre-wrap; word-wrap: break-word;"
-    const a = document.createElement("a");
-    if (comment.topCommentId === "" || true) {
-        a.innerText = "コメントに移動";
-    } else {
-        a.innerText = "返信に移動";
-    }
+    /*const a = document.createElement("a");
+    a.innerText = "詳細";
     a.href = "https://www.youtube.com/watch?v=niKAylKNIEI&lc=" + comment.commentId;
     a.target = "_blank";
-    a.style = "white-space: nowrap;"
+    a.style = "white-space: nowrap;"*/
+    const detailButton = document.createElement("button");
+    detailButton.innerText = "詳細を見る";
+    detailButton.classList.add("commentDetailButton");
+    detailButton.addEventListener("click", function (e) { timeliner.showDetail(e.currentTarget.parentElement.parentElement.dataset.commentid) });
+
+
     /*const about = document.createElement("span");
     about.innerText = " " + array[2].getFullYear() + "/" + array[2].getMonth() + "/" + array[2].getDate() + " " + array[2].getHours() + ":" + array[2].getMinutes() + ":" + array[2].getSeconds();
     about.innerText = comment.date.toLocaleString();
     about.style = "margin: 0 0 0 8px; color: gray; white-space: nowrap;"*/
 
-    const rowDiv = document.createElement("div");
-    rowDiv.style = "word-break: break-word;";
+    /*const rowDiv = document.createElement("div");
+    rowDiv.style = "word-break: break-word;";*/
 
     //parentElement.appendChild(container);
     container.appendChild(channelIcon);
     container.appendChild(textContainer);
     textContainer.appendChild(handleAndDate);
     textContainer.appendChild(text);
-    textContainer.appendChild(rowDiv);
-    rowDiv.appendChild(a);
+    //textContainer.appendChild(rowDiv);
+    /*if(comment.channelId !== "unknown")
+        rowDiv.appendChild(a);*/
+    if (isHideDetailButton !== true){
+        textContainer.appendChild(detailButton);
+    }else{
+        container.style.paddingBottom = "16px";
+    }
     //rowDiv.appendChild(about);
 
     return container;
